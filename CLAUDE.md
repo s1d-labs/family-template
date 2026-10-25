@@ -9,7 +9,8 @@ text is on home.s1d.me → Docs → Scraper guide (Part 2), and on team boxes at
 
 - `family.py` holds the projects, targets, env, queue items and health checks; `scrape.json` the setup steps and tasks; the task
   scripts do the scraping. After changing `family.py`, the **setup** workflow (Actions → setup) applies it to the hub.
-- `parse()` is pure, so it can be tested on saved pages; `python crawl.py --local <url>` runs one page without the hub.
+- `parse()` is pure and tested on saved pages (`tests/`); `python crawl.py --local <url>` runs one page without the hub;
+  `scrape-check` runs setup and a task against a local stand-in hub and reports what works (also run by the **check** workflow).
 - The repo is public; uploads go through `hub.upload_many` with signed links, so no storage keys are needed here.
 - The hub's speed control runs on the request metrics (`n_http`, `t_http_s`, `http_<code>`, `http_error`) and is applied through
   `hub.settings`; a task exits when the queue is empty and the runner asks for the next one.
@@ -164,11 +165,19 @@ per thread. `HubClient` is thread-safe for `record`, `metric`, `failure`, `uploa
 
 ### Testing
 
-- Keep `parse()` pure and test it with saved pages (`pytest` in the repo).
-- `python crawl.py --local <url>` (template) fetches one page and prints the records, without the hub.
-- The runner can be dry-run against a checkout: `python -m runner.worker --family <f> --family-dir . --dry-run --hub-fake`
-  (from a clone of s1d-labs/runner) prints the exact command and env it would run.
-- First real run: seed 3-5 items, run setup, and watch scrape.s1d.me → Runs before seeding the rest.
+- **Parsing**: keep `parse()` pure and test it with saved pages (`tests/test_parse.py`, pages in `tests/pages/`); `python -m pytest tests`.
+- **One page, no hub**: `python crawl.py --local <url>` (template) fetches a page and prints the records.
+- **Against the hub's API**: `scrape-check` (from `scrape-hub-client` ≥ 0.5, `pip install "scrape-hub-client @ git+https://github.com/s1d-labs/runner@main#subdirectory=sdk"`).
+  It runs `setup_family.py` and one task against `scrape_hub_client.testhub.TestHub`, a local stand-in that answers the same runner API
+  with the same validation, using the runner's env vars, cwd and argv. Options: `--items N` (default 3), `--project`, `--task`,
+  `--pause S` (seconds the hub reports paused at the start, default 5, 0 = off), `--no-rerun`, `--timeout S`, `--json`; for repos without
+  `setup_family.py`: `--project P --task T --env K=V --item '{"key": "...", "payload": {...}}'`. Exit code 0 = no FAIL.
+  Checks: scrape.json (family name, tasks, scripts exist), setup runs, pool entries (family, task in scrape.json, target, probe
+  registered), health checks, and for each run: exits on its own with code 0, starts a run, waits while paused (an empty claim while
+  `paused` is not the end of the queue), claims all N items, completes every claimed item, ≥ 1 done, records stored, `n_http` and
+  `t_http_s` reported, run closed as finished, no call rejected; then the rerun stores the same record ids. Output in `.scrape-check/`.
+- **CI**: `.github/workflows/check.yml` (template) runs the parsing tests and `scrape-check --items 2` on every push.
+- **First pool run**: seed 3-5 items, run setup, and watch scrape.s1d.me → Runs before seeding the rest.
 
 ### Common pitfalls
 

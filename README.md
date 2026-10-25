@@ -13,9 +13,12 @@ its code on members' GitHub Actions minutes. This template is a complete, workin
    - `family.py`: your projects (one queue of work per site), their target hosts, the env your command needs, the queue items,
      and the health checks.
    - `crawl.py` (or whatever your tasks run): the scraper.
-4. Run the **setup** workflow (Actions → setup → Run workflow). It registers the projects, puts them in the pool and registers
+4. **Check it**: `scrape-check` in the repo (needs `pip install "scrape-hub-client @ git+https://github.com/s1d-labs/runner@main#subdirectory=sdk"`).
+   It runs your setup and task against a local stand-in hub on 3 real items and says what works. The **check** workflow runs it
+   (and `tests/`) on every push.
+5. Run the **setup** workflow (Actions → setup → Run workflow). It registers the projects, puts them in the pool and registers
    the health checks.
-5. The hub starts runs in members' accounts when the pool is on and there is work. Watch it on scrape.s1d.me.
+6. The hub starts runs in members' accounts when the pool is on and there is work. Watch it on scrape.s1d.me.
 
 ## What your code gets
 
