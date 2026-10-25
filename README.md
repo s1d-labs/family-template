@@ -33,7 +33,7 @@ The pool worker ([s1d-labs/runner](https://github.com/s1d-labs/runner)) checks o
 Use `scrape_hub_client` (`HubClient`) to claim queue items, store records, upload files and report counters. Exit when there is
 nothing left; the worker then asks the hub for the next assignment.
 
-## Rules
+## Rules (the full contract is in CLAUDE.md, written for people and for Claude Code)
 
 - **Be polite.** Use `hub.settings["threads"]` and `delay_ms`, idle while `hub.settings["paused"]`, and report `n_http` and
   `t_http_s` for every request and `http_<code>` / `http_error` for failures: the hub throttles you from these.
