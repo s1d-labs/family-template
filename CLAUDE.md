@@ -1,18 +1,18 @@
 # CLAUDE.md: how this repo works (s1d-labs scrape pool family)
 
 This repo is one **family** of the s1d-labs scrape pool: scrapers that run on members' GitHub Actions minutes, coordinated by
-scrape-hub (https://scrape.s1d.me). The hub is generic: it hands out queue items, limits load per site, signs file uploads, and
-tracks requests. Everything about this family's data lives here. Follow the contract below exactly; it is what the runner and the
-hub enforce. The same text is on home.s1d.me → Docs → Scraper guide (Part 2).
+scrape-hub (https://scrape.s1d.me). The hub is generic: it hands out queue items, sets speed per site, signs file uploads, and tracks
+requests. Everything about this family's data lives here. Below is the technical reference the runner and the hub work with; the same
+text is on home.s1d.me → Docs → Scraper guide (Part 2), and on team boxes at /usr/local/share/team-docs/13-scraper-guide.md.
 
 ## Working here
 
-- Edit `family.py` (projects, targets, env, queue items, health checks), `scrape.json` (setup steps, tasks), and the task scripts.
-- Keep `parse()` pure and test it on saved pages; run `python crawl.py --local <url>` to try one page without the hub.
-- Never add secrets, tokens or storage keys anywhere in this repo. Uploads go through `hub.upload_many`.
-- After changing `family.py`, the owner runs the **setup** workflow (Actions → setup) to apply it.
-- Be polite to the site: report every request (`n_http`, `t_http_s`, `http_<code>`, `http_error`), obey `hub.settings`, back off on
-  403/429/503, exit when the queue is empty.
+- `family.py` holds the projects, targets, env, queue items and health checks; `scrape.json` the setup steps and tasks; the task
+  scripts do the scraping. After changing `family.py`, the **setup** workflow (Actions → setup) applies it to the hub.
+- `parse()` is pure, so it can be tested on saved pages; `python crawl.py --local <url>` runs one page without the hub.
+- The repo is public; uploads go through `hub.upload_many` with signed links, so no storage keys are needed here.
+- The hub's speed control runs on the request metrics (`n_http`, `t_http_s`, `http_<code>`, `http_error`) and is applied through
+  `hub.settings`; a task exits when the queue is empty and the runner asks for the next one.
 
 
 ### Repository layout (`s1d-labs/<family>`, public)
@@ -25,7 +25,7 @@ hub enforce. The same text is on home.s1d.me → Docs → Scraper guide (Part 2)
 | task scripts | yes | e.g. `crawl.py`; one per task named in `scrape.json` |
 | `requirements.txt` | usually | installed by a `setup` step |
 
-- `family` must equal the repo name and a family that exists on the hub (the hub owner adds it).
+- `family` is the repo name, and a family that exists on the hub (the hub owner adds it).
 - `tasks`: names match `^[a-z0-9][a-z0-9_-]{0,40}$`; commands are argv lists. `"python"` is replaced by the runner's interpreter.
 - `setup` commands run once per runner job, in the repo root, before any task (e.g. `pip install -r requirements.txt`).
 
@@ -170,10 +170,10 @@ per thread. `HubClient` is thread-safe for `record`, `metric`, `failure`, `uploa
   (from a clone of s1d-labs/runner) prints the exact command and env it would run.
 - First real run: seed 3-5 items, run setup, and watch scrape.s1d.me → Runs before seeding the rest.
 
-### Don'ts
+### Common pitfalls
 
-- No secrets in the repo or in `env`. No storage keys: use `upload_many`.
-- Don't create projects for other families or write to them (the hub refuses).
-- Don't loop forever on an empty queue, and don't retry a failing request in a tight loop.
-- Don't fetch what is already stored when the site's ids let you check first.
-- Don't change `scrape.json` task names without updating your projects' pool entries (`set_pool`).
+- Secrets in the repo or in `env`: family repos are public, and uploads work without keys (`upload_many`).
+- Projects of other families: the hub refuses writes to them.
+- An endless loop on an empty queue, or tight retries of a failing request: exiting and letting the hub retry works better.
+- Fetching what is already stored, when the site's ids allow checking first.
+- Renaming tasks in `scrape.json` without updating the projects' pool entries (`set_pool`).
