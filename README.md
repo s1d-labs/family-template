@@ -7,7 +7,9 @@ its code on members' GitHub Actions minutes. This template is a complete, workin
 ## Make your family
 
 1. Ask the hub owner to **add the family** on [scrape.s1d.me/runners](https://scrape.s1d.me/runners) (name, what it scrapes, owner).
-2. **Use this template** → owner **s1d-labs**, name = the family name, **Public** (public repos get free Actions minutes).
+   The hub creates `s1d-labs/<family>` from this template, names the family in `scrape.json`, and makes the owner admin
+   (with the GitHub account they added on home.s1d.me).
+2. Clone it: `gh repo clone s1d-labs/<family>`.
 3. In your repo:
    - `scrape.json`: set `"family"` to the family name; list your tasks (one command each) and setup steps.
    - `family.py`: your projects (one queue of work per site), their target hosts, the env your command needs, the queue items,
