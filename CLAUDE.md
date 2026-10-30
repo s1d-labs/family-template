@@ -47,6 +47,10 @@ installs `scrape-hub-client`, runs `setup`, then for each assignment runs `cwd=f
 - Exit code 0 = finished normally (including "queue empty"). Non-zero = the worker waits a bit and asks for new work.
 - The process gets SIGINT when its time is up (then SIGTERM, then SIGKILL): catch it, call `hub.close("failed", ...)`, exit.
 - Authentication is automatic: the client mints a GitHub OIDC token (the workflow grants `id-token: write`). No secrets.
+- On a **pool server** (projects with `geo`, below) the same command runs the same way, with the same env vars, from a checkout of the
+  family repo at `main` (fetched again every 5 minutes; `setup` re-runs when the commit changes) in its own venv, as an unprivileged
+  user: no sudo, so `playwright install --with-deps` runs without `--with-deps` (Chromium's libraries are already installed). The
+  client authenticates with the server's token from `SCRAPE_HUB_TOKEN`; the code doesn't change.
 
 ### Projects, pool entries, health checks (`setup_family.py`, from GitHub Actions in the family repo only)
 
@@ -64,6 +68,10 @@ seed_queue(name, [{"key": "page-1", "payload": {"url": "...", "expected": 20}}, 
 - `seed_queue` keeps existing keys (safe to re-run). Keys ≤ 200 chars, unique per project. `payload` is any JSON your task needs;
   `payload.expected` (int) = records expected from that item (progress and ETAs).
 - `set_pool(..., max_workers=n)` caps workers on that project; the family's default per target is 8.
+- `set_pool(..., geo="IN")`: the target only answers from that country. Then the work goes **only** to the hub's pool servers in that
+  country (machines in India with their own IPs), never to GitHub runners, whose IPs are in the US/EU. `geo=""` clears it. Without
+  `geo` the work goes only to GitHub runners. Pool servers are few (5 worker processes in India as of 2026-10-30), so `geo` work runs
+  slower than GitHub work; it suits sites that refuse foreign IPs (most `.gov.in` / `.nic.in` portals).
 
 ### The client in a task (`scrape_hub_client.HubClient`)
 
