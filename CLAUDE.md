@@ -26,7 +26,7 @@ text is on home.s1d.me → Docs → Scraper guide (Part 2), and on team boxes at
 | task scripts | yes | e.g. `crawl.py`; one per task named in `scrape.json` |
 | `requirements.txt` | usually | installed by a `setup` step |
 
-- `family` is the repo name, and a family that exists on the hub (the hub owner adds it).
+- `family` is the repo name, and a family that exists on the hub (any member adds one for themselves on scrape.s1d.me → Runners).
 - `tasks`: names match `^[a-z0-9][a-z0-9_-]{0,40}$`; commands are argv lists. `"python"` is replaced by the runner's interpreter.
 - `setup` commands run once per runner job, in the repo root, before any task (e.g. `pip install -r requirements.txt`).
 
@@ -68,6 +68,9 @@ seed_queue(name, [{"key": "page-1", "payload": {"url": "...", "expected": 20}}, 
 - `seed_queue` keeps existing keys (safe to re-run). Keys ≤ 200 chars, unique per project. `payload` is any JSON your task needs;
   `payload.expected` (int) = records expected from that item (progress and ETAs).
 - `set_pool(..., max_workers=n)` caps workers on that project; the family's default per target is 8.
+- `set_pool(..., threads=8, delay_ms=0)`: the speed each worker process gets in `hub.settings` (threads 1-32, delay 0-5000 ms).
+  The family owner can also change it on scrape.s1d.me (project → Speed / Exact); running Setup again sets it back to the code's
+  value. The back-off and the automatic throttle may lower it for a while when the site pushes back.
 - `set_pool(..., proxy="IN")`: the target only answers from India, and the work runs on GitHub runners through the hub's Indian
   proxies (10 static Mumbai IPs), **one proxy per worker**; the task gets it as `HTTPS_PROXY` / `HTTP_PROXY` (requests, httpx, curl
   use them by themselves) and `SCRAPE_PROXY` (for Playwright and other explicit proxy settings). No free proxy = the project waits.
