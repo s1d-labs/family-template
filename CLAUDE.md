@@ -68,6 +68,10 @@ seed_queue(name, [{"key": "page-1", "payload": {"url": "...", "expected": 20}}, 
 - `seed_queue` keeps existing keys (safe to re-run). Keys ≤ 200 chars, unique per project. `payload` is any JSON your task needs;
   `payload.expected` (int) = records expected from that item (progress and ETAs).
 - `set_pool(..., max_workers=n)` caps workers on that project; the family's default per target is 8.
+- `set_pool(..., proxy="IN")`: the target only answers from India, and the work runs on GitHub runners through the hub's Indian
+  proxies (10 static Mumbai IPs), **one proxy per worker**; the task gets it as `HTTPS_PROXY` / `HTTP_PROXY` (requests, httpx, curl
+  use them by themselves) and `SCRAPE_PROXY` (for Playwright and other explicit proxy settings). No free proxy = the project waits.
+  A family borrows at most 4 at once by default. This is the first choice for India-only sites. Details: [Proxies](/docs/17-proxies).
 - `set_pool(..., geo="IN")`: the target only answers from that country. Then the work goes **only** to the hub's pool servers in that
   country (machines in India with their own IPs), never to GitHub runners, whose IPs are in the US/EU. `geo=""` clears it. Without
   `geo` the work goes only to GitHub runners. Pool servers are few (10 worker processes on 5 Indian IPs as of 2026-10-30), so `geo` work runs
