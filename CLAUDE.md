@@ -71,6 +71,9 @@ seed_queue(name, [{"key": "page-1", "payload": {"url": "...", "expected": 20}}, 
 - `set_pool(..., threads=8, delay_ms=0)`: the speed each worker process gets in `hub.settings` (threads 1-32, delay 0-5000 ms).
   The family owner can also change it on scrape.s1d.me (project → Speed / Exact); running Setup again sets it back to the code's
   value. The back-off and the automatic throttle may lower it for a while when the site pushes back.
+- `set_pool(..., proxy="IN", proxy_only=["91.124.42."])`: lend this project only some proxies (labels like `in-06` or IP prefixes),
+  for sites that refuse some of the hub's IP ranges (mes.gov.in and nhai.gov.in only accept `91.124.42.x`). Health checks
+  (`set_probes`) of `.gov.in` / `.nic.in` sites, of sites used by `proxy`/`geo` projects, or with `"proxy": "IN"` run through a proxy.
 - `set_pool(..., proxy="IN")`: the target only answers from India, and the work runs on GitHub runners through the hub's Indian
   proxies (10 static Mumbai IPs), **one proxy per worker**; the task gets it as `HTTPS_PROXY` / `HTTP_PROXY` (requests, httpx, curl
   use them by themselves) and `SCRAPE_PROXY` (for Playwright and other explicit proxy settings). No free proxy = the project waits.
