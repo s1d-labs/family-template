@@ -14,6 +14,7 @@ import sys
 import time
 
 import requests
+from scrape_hub_client import HubClient, LocalHub, timed_get
 
 PROJECT = os.environ.get("SCRAPE_POOL_PROJECT", "")
 SITE = os.environ.get("SITE", "https://books.toscrape.com")
@@ -33,23 +34,6 @@ def parse(page):
     return out
 
 
-class LocalHub:
-    """Stand-in for HubClient so `--local` runs without the hub: counters go to stderr, records to stdout."""
-    settings = {"threads": 1, "delay_ms": 0, "paused": False}
-
-    def __init__(self):
-        self.counts = {}
-
-    def metric(self, name, value=1):
-        self.counts[name] = self.counts.get(name, 0) + value
-
-    def error(self, n=1):
-        self.metric("errors", n)
-
-    def block(self, n=1):
-        self.metric("blocked", n)
-
-
 def local(url):
     hub = LocalHub()
     page = fetch(hub, requests.Session(), url)
@@ -60,19 +44,8 @@ def local(url):
 
 
 def fetch(hub, session, url):
-    t = time.time()
-    try:
-        r = session.get(url, timeout=30, headers={"User-Agent": UA})
-    except requests.RequestException:
-        hub.metric("http_error")
-        hub.error()
-        return None
-    hub.metric("n_http")
-    hub.metric("t_http_s", time.time() - t)
-    if r.status_code != 200:
-        hub.metric(f"http_{r.status_code}")
-        if r.status_code in (403, 429, 503):
-            hub.block()
+    r = timed_get(hub, session, url, timeout=30, headers={"User-Agent": UA})    # counts n_http, t_http_s, http_<code>, http_error
+    if r is None or r.status_code != 200:
         return None
     if not r.encoding or r.encoding.lower() == "iso-8859-1":     # no charset declared: requests guesses Latin-1; trust the content
         r.encoding = r.apparent_encoding or "utf-8"
@@ -80,7 +53,6 @@ def fetch(hub, session, url):
 
 
 def main():
-    from scrape_hub_client import HubClient      # imported here so --local works without it
     hub = HubClient(PROJECT, job_index=int(os.environ.get("SCRAPE_JOB_INDEX", "0")), total_jobs=int(os.environ.get("SCRAPE_TOTAL_JOBS", "1")))
     session = requests.Session()
     try:

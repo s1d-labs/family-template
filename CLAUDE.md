@@ -80,7 +80,7 @@ seed_queue(name, [{"key": "page-1", "payload": {"url": "...", "expected": 20}}, 
   A family borrows at most 4 at once by default. This is the first choice for India-only sites. Details: [Proxies](/docs/17-proxies).
 - `set_pool(..., geo="IN")`: the target only answers from that country. Then the work goes **only** to the hub's pool servers in that
   country (machines in India with their own IPs), never to GitHub runners, whose IPs are in the US/EU. `geo=""` clears it. Without
-  `geo` the work goes only to GitHub runners. Pool servers are few (10 worker processes on 5 Indian IPs as of 2026-10-30), so `geo` work runs
+  `geo` the work goes only to GitHub runners. Pool servers are few (`vpsin` with 1 Indian IP and `vpsin2` with 4, as of 2026-11-12), so `geo` work runs
   slower than GitHub work; it suits sites that refuse foreign IPs (most `.gov.in` / `.nic.in` portals).
 
 ### The client in a task (`scrape_hub_client.HubClient`)
@@ -121,6 +121,17 @@ hub.close()                                                 # or hub.close("fail
 Anything else you count (`captcha_ok`, `items_skipped`, ...) is shown but not interpreted. `hub.block()` counts a request the site
 refused (403/429/503); `hub.error()` counts any other error. Both feed the automatic back-off.
 
+### Helpers in the client (`scrape-hub-client` ≥ 0.10.0)
+
+| Helper | What it does |
+|---|---|
+| `timed_get(hub, session, url, **kw)` | `session.get` with the metrics above: `n_http`, `t_http_s`, `http_<code>` for a status other than 200, `hub.block()` for 403/429/503, `http_error` + `hub.error()` when there is no answer. Returns the response for every status, `None` when there is no answer (`raise_errors=True` re-raises). `timeout` defaults to 30 s |
+| `timed_post(...)`, `timed_request(hub, session, method, url, **kw)` | the same for POST and any other method; `hub=None` gives no metrics |
+| `count_request(hub, status, seconds)` | the same metrics for another client (httpx, Playwright); `status=None` = no answer |
+| `stop_flag()` | a `threading.Event` that SIGINT / SIGTERM set: `while not stop.is_set(): ...`, then `hub.close("failed", "stopped by signal")`. Call it in `main()`; `stop_flag(install=False)` at module level gives the same Event without installing the handlers |
+| `LocalHub(threads=1, delay_ms=0, save_dir=None)` | stand-in for `HubClient` in `--local` mode: counters in `hub.counts`, records to stdout, uploads to `save_dir` |
+| `ca_bundle(extra_pems=())` | path of certifi's roots + public intermediate certificates that some Indian government servers do not send; use it as `session.verify`. Verification stays on. A certificate other families can use goes in `s1d-labs/runner` `sdk/scrape_hub_client/certs/` |
+
 ### What the hub does with them
 
 - **Back-off** (on unless the project turns `auto_backoff` off): in the last 3 minutes, > 25% of requests blocked (with ≥ 20
@@ -134,21 +145,14 @@ refused (403/429/503); `hub.error()` counts any other error. Both feed the autom
 
 ```python
 import os, time, requests
-from scrape_hub_client import HubClient
+from scrape_hub_client import HubClient, timed_get
 
 PROJECT = os.environ["SCRAPE_POOL_PROJECT"]
 DEADLINE = time.time() + float(os.environ.get("SCRAPE_MAX_HOURS", "1")) * 3600 - 120
 
 def fetch(hub, session, url):
-    t = time.time()
-    try:
-        r = session.get(url, timeout=30)
-    except requests.RequestException:
-        hub.metric("http_error"); hub.error(); return None
-    hub.metric("n_http"); hub.metric("t_http_s", time.time() - t)
-    if r.status_code != 200:
-        hub.metric(f"http_{r.status_code}")
-        if r.status_code in (403, 429, 503): hub.block()
+    r = timed_get(hub, session, url, timeout=30)     # counts n_http, t_http_s, http_<code>, http_error
+    if r is None or r.status_code != 200:
         return None
     if not r.encoding or r.encoding.lower() == "iso-8859-1":   # no charset declared: don't let requests assume Latin-1
         r.encoding = r.apparent_encoding or "utf-8"
@@ -207,12 +211,13 @@ per thread. `HubClient` is thread-safe for `record`, `metric`, `failure`, `uploa
 
 ## India pool servers (`geo`)
 
-Many Indian government sites (most `.gov.in` / `.nic.in`) refuse requests from outside India. GitHub runners are in the US/EU and the
-team boxes are in Germany, so those sites time out or answer 403 there.
+Many Indian government sites (most `.gov.in` / `.nic.in`) refuse requests from outside India. GitHub runners are in the US/EU, so those
+sites time out or answer 403 there. The team boxes are on dev-vps-3 in Mumbai (since 2026-11-12): many of
+these sites answer there, but some refuse its data-centre IP.
 
-- `set_pool(..., geo="IN")` in `setup_family.py` sends that project's work **only** to the hub's pool servers in India (`vpsin`,
-  `vpsin2`: 10 workers on 5 Indian IPs); GitHub runners never get it. Projects without `geo` run only on GitHub runners.
-  `geo=""` moves a project back. Run the **Setup** workflow after changing it. India capacity is small (10 workers against a few
+- `set_pool(..., geo="IN")` in `setup_family.py` sends that project's work **only** to the hub's pool servers in India (`vpsin`
+  with 1 Indian IP, `vpsin2` with 4); GitHub runners never get it. Projects without `geo` run only on GitHub runners.
+  `geo=""` moves a project back. Run the **Setup** workflow after changing it. India capacity is small (5 IPs, a few workers on each, against a few
   hundred GitHub ones), so `geo` suits the sites that need it.
 - On a pool server a task runs the same way as on GitHub: a checkout of this repo at `main` (fetched again every 5 minutes) in its own
   venv with `scrape-hub-client`, `setup` from `scrape.json` re-run when the commit changes, the same `SCRAPE_*` env vars, and the
@@ -220,7 +225,7 @@ team boxes are in Germany, so those sites time out or answer 403 there.
 - It runs as an unprivileged user without `sudo`: `playwright install --with-deps chromium` runs without `--with-deps` (Chromium's
   libraries are already there); other setup steps that need root won't work there. Per worker: 1.5 GB RAM, 1.5 CPU, a restart every
   6 hours. The servers reach the internet and scrape.s1d.me only.
-- Testing: an India-only site times out from a team box, so parsing is tested offline with saved pages (`tests/pages/` +
+- Testing: an India-only site may refuse a team box or a GitHub runner, so parsing is tested offline with saved pages (`tests/pages/` +
   `tests/test_parse.py`). After Setup, scrape.s1d.me → Runners → *Working now* shows the India servers on the project, and its runs
   are listed under `server/vpsin` / `server/vpsin2`.
 - Full page: home.s1d.me/docs/15-india-servers (in team boxes: `/usr/local/share/team-docs/15-india-servers.md`).
@@ -243,7 +248,7 @@ capacity than the India servers.
   u = urlsplit(os.environ["SCRAPE_PROXY"])
   browser = p.chromium.launch(proxy={"server": f"http://{u.hostname}:{u.port}", "username": unquote(u.username), "password": unquote(u.password)})
   ```
-- From a team box (in Germany, where India-only sites time out): `myproxy run CMD…` runs one command through a proxy,
+- From a team box (dev-vps-3 in Mumbai; for sites that still refuse it): `myproxy run CMD…` runs one command through a proxy,
   `myproxy curl URL` tests a site, `eval "$(myproxy env)"` sets the variables in the shell, `myproxy release` gives it back
   (2 hours by default, one per member). `myproxy run scrape-check --items 2` checks a scraper end to end through an Indian IP.
 - Each proxy IP is one visitor to the site: the hub's speed limits still apply, and 429 / 403 answers slow the project down.
