@@ -289,5 +289,6 @@ Reports from this repo use ASD-STE100 Simplified Technical English (STE). This i
 - Write instructions in the imperative. Use vertical lists for steps and items.
 - Do not use more than three nouns in a row. Do not use slang, idioms or contractions.
 - For investigation findings: give exact facts and their sources, write indicators as indicators, and do not name officials or private individuals.
+- Reports for other people go to https://pub.s1d.me: run `pub publish FILE` in a team box. New items are password-protected. Team members signed in with id.s1d.me open them with no password. Outsiders need the secret link or the password (`pub show SLUG`).
 
 Full summary with examples: team doc `18-writing-standard` (in a team box: `/usr/local/share/team-docs/18-writing-standard.md`).
