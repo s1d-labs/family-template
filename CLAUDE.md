@@ -205,6 +205,78 @@ per thread. `HubClient` is thread-safe for `record`, `metric`, `failure`, `uploa
 - Fetching what is already stored, when the site's ids allow checking first.
 - Renaming tasks in `scrape.json` without updating the projects' pool entries (`set_pool`).
 
+## India pool servers (`geo`)
+
+Many Indian government sites (most `.gov.in` / `.nic.in`) refuse requests from outside India. GitHub runners are in the US/EU and the
+team boxes are in Germany, so those sites time out or answer 403 there.
+
+- `set_pool(..., geo="IN")` in `setup_family.py` sends that project's work **only** to the hub's pool servers in India (`vpsin`,
+  `vpsin2`: 10 workers on 5 Indian IPs); GitHub runners never get it. Projects without `geo` run only on GitHub runners.
+  `geo=""` moves a project back. Run the **Setup** workflow after changing it. India capacity is small (10 workers against a few
+  hundred GitHub ones), so `geo` suits the sites that need it.
+- On a pool server a task runs the same way as on GitHub: a checkout of this repo at `main` (fetched again every 5 minutes) in its own
+  venv with `scrape-hub-client`, `setup` from `scrape.json` re-run when the commit changes, the same `SCRAPE_*` env vars, and the
+  client signs in with the server's token. No code changes.
+- It runs as an unprivileged user without `sudo`: `playwright install --with-deps chromium` runs without `--with-deps` (Chromium's
+  libraries are already there); other setup steps that need root won't work there. Per worker: 1.5 GB RAM, 1.5 CPU, a restart every
+  6 hours. The servers reach the internet and scrape.s1d.me only.
+- Testing: an India-only site times out from a team box, so parsing is tested offline with saved pages (`tests/pages/` +
+  `tests/test_parse.py`). After Setup, scrape.s1d.me → Runners → *Working now* shows the India servers on the project, and its runs
+  are listed under `server/vpsin` / `server/vpsin2`.
+- Full page: home.s1d.me/docs/15-india-servers (in team boxes: `/usr/local/share/team-docs/15-india-servers.md`).
+
+## Proxies (`proxy="IN"`)
+
+The hub has 10 static proxies in Mumbai (10 Indian IPs). Sites that refuse foreign visitors (most `.gov.in` / `.nic.in`) answer
+through them. They are the first choice for India-only sites: the work runs on the pool's GitHub runners, which have far more
+capacity than the India servers.
+
+- `set_pool(..., proxy="IN")` in `setup_family.py` (then run the **Setup** workflow): GitHub pool workers take that project's work and
+  **each worker borrows one proxy** for its assignment (one worker per IP). With no proxy free the project waits; the hub starts no
+  more runs than there are free proxies. A family borrows at most 4 at once by default (the hub owner changes it per family).
+  `proxy=""` turns it off. `geo="IN"` and `proxy="IN"` together: both the India servers and proxied GitHub workers take the work.
+- The task gets the proxy in `HTTPS_PROXY` / `HTTP_PROXY` (requests, httpx, urllib3, curl, pip use them by themselves) and in
+  `SCRAPE_PROXY` for code that sets a proxy explicitly; `SCRAPE_PROXY_LABEL` / `SCRAPE_PROXY_EXIT` name it. Calls to scrape.s1d.me
+  and GitHub go direct, and the URL is masked in the GitHub log. Playwright takes the login separately:
+  ```python
+  from urllib.parse import urlsplit, unquote
+  u = urlsplit(os.environ["SCRAPE_PROXY"])
+  browser = p.chromium.launch(proxy={"server": f"http://{u.hostname}:{u.port}", "username": unquote(u.username), "password": unquote(u.password)})
+  ```
+- From a team box (in Germany, where India-only sites time out): `myproxy run CMD…` runs one command through a proxy,
+  `myproxy curl URL` tests a site, `eval "$(myproxy env)"` sets the variables in the shell, `myproxy release` gives it back
+  (2 hours by default, one per member). `myproxy run scrape-check --items 2` checks a scraper end to end through an Indian IP.
+- Each proxy IP is one visitor to the site: the hub's speed limits still apply, and 429 / 403 answers slow the project down.
+  scrape.s1d.me → Runners → Proxies shows each proxy's health, who has it and its use.
+- Full page: home.s1d.me/docs/17-proxies (in team boxes: `/usr/local/share/team-docs/17-proxies.md`).
+
+## Speed (`threads`, `delay_ms`)
+
+Each project's speed is `threads` per worker process (1-32) and `delay_ms` between requests, handed to the task in `hub.settings`.
+The family owner chooses it:
+
+- from code: `set_pool(..., threads=8, delay_ms=0)` in `setup_family.py`, then run the **Setup** workflow (running Setup again sets
+  it back to what the code says);
+- on scrape.s1d.me: the project's **Speed** buttons, or **Exact** (type the threads and the delay, press Enter); runners pick it up
+  within about 30 seconds.
+
+The hub's back-off and automatic throttle may lower it for a while when the site answers 429 / 403 / 503 or slows down; it returns by
+itself. More threads means more load on the site.
+
+New families: any member adds one on scrape.s1d.me → Runners → Families → Add a family (they become its owner; the hub makes
+`s1d-labs/<name>` from the template with them as admin and clones it into their box at `~/work/<name>`).
+
+## Picking proxies (`proxy_only`) and health checks through proxies
+
+- The 10 proxies are in three IP ranges: `191.219.x` (in-01 … in-05), `91.124.42.x` (in-06, in-07), `95.134.119.x` (in-08 … in-10).
+  Some sites refuse whole ranges (2026-11-02: mes.gov.in and nhai.gov.in only accept `91.124.42.x`; the proxy then answers
+  "502 Bad Gateway" right away). `set_pool(..., proxy="IN", proxy_only=["91.124.42."])` lends that project only those (IP prefixes or
+  labels like `in-06`); its workers then wait for one of them.
+- The hub's health checks of `.gov.in` / `.nic.in` sites, of sites used by a `proxy` / `geo` project, or with `"proxy": "IN"` in
+  `set_probes` go through an Indian proxy (one per IP range, up to 3, before a site counts as down), so India-only sites no longer
+  look down and hold their work.
+- Full page: home.s1d.me/docs/17-proxies.
+
 ## Writing reports
 
 Reports from this repo use ASD-STE100 Simplified Technical English (STE). This includes findings, summaries, reports and README text for readers.

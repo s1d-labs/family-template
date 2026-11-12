@@ -15,6 +15,8 @@ its code on members' GitHub Actions minutes. This template is a complete, workin
    - `family.py`: your projects (one queue of work per site), their target hosts, the env your command needs, the queue items,
      and the health checks.
    - `crawl.py` (or whatever your tasks run): the scraper.
+   - `README.md`: replace this text with your family's own: what it scrapes, its projects and tasks, and how to run the check.
+     Delete `crawl.py`, `tests/pages/catalogue-page-1.html` and the example test when your own task replaces them.
 4. **Check it**: `scrape-check` in the repo (needs `pip install "scrape-hub-client @ git+https://github.com/s1d-labs/runner@main#subdirectory=sdk"`).
    It runs your setup and task against a local stand-in hub on 3 real items and says what works. The **check** workflow runs it
    (and `tests/`) on every push.
